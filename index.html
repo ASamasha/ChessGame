@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chess game</title>
+  <link rel="stylesheet" href="style.css">
+  </head>
+<body>
+  <div class="app">
+    <div class="panel board-wrap">
+      <div class="topbar">
+        <div>
+          <div class="title">Chess Game</div>
+          <div class="label" id="turnLabel">White to move</div>
+        </div>
+        <div class="controls">
+          <button id="btnNew" class="primary">New Game</button>
+          <button id="btnUndo">Undo</button>
+          <button id="btnFlip">Flip Board</button>
+          <button id="btnAIMove">AI Move</button>
+        </div>
+      </div>
+      <div class="board" id="board">
+        <div class="grid" id="grid"></div>
+      </div>
+      <div class="footer">Click a piece, then a highlighted square. Drag is optional 💡</div>
+    </div>
+
+    <div class="panel sidebar">
+      <div class="stats">
+        <div class="card">
+          <div class="label">Game Status</div>
+          <div id="status">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Mode</div>
+          <div class="flex">
+            <span class="badge" id="sideBadge">You: White</span>
+            <label class="switch" title="Play vs Computer (Black)">
+              <input type="checkbox" id="vsAI" />
+              <span class="label">vs AI</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">Move List</div>
+        <div class="list" id="moveList"></div>
+      </div>
+
+      <div class="card">
+        <div class="label">FEN</div>
+        <div class="pgn" id="fenBox"></div>
+        <div class="flex" style="margin-top:8px">
+          <button id="btnCopyFEN">Copy FEN</button>
+          <button id="btnLoadFEN">Load FEN</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">PGN (read-only)</div>
+        <div class="pgn" id="pgnBox"></div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="promoDlg">
+    <div style="font-weight:700">Promote to:</div>
+    <div class="promo-grid" id="promoGrid"></div>
+  </dialog>
+  <script src="index.js"></script>
+  </body>
+</html>
+
+
