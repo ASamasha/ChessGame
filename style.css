@@ -109,6 +109,7 @@ button.primary { background: #2563eb; border-color: #3b82f6; }
   font-size: 44px;
   cursor: pointer;
   line-height: 1;
+  pointer-events: none;
 }
 
 .piece.white-piece {
@@ -139,11 +140,11 @@ button.primary { background: #2563eb; border-color: #3b82f6; }
 .pgn { font-family: monospace; background: #0b1220; border-radius: 12px; padding: 10px; border: 1px solid #1f2937; min-height: 44px; word-break: break-all; }
 
 dialog {
-  border: none;
+  border: 1px solid #334155;
   border-radius: 16px;
   background: #0b1220;
   color: var(--text);
-  padding: 14px 16px;
+  padding: 18px 20px;
   box-shadow: 0 30px 120px #000a;
 }
 
@@ -157,14 +158,12 @@ dialog {
 .switch input:checked::after { left: 20px; }
 .footer { font-size: 12px; color: var(--sub); text-align: center; margin-top: 8px; }
 
-/* Add to style.css */
-.piece {
-  font-size: 44px;
-  cursor: pointer;
-  line-height: 1;
-  pointer-events: none; /* Allows click to pass through to square container */
+/* Game Over Dialog Styling */
+.game-over-modal {
+  text-align: center;
+  min-width: 280px;
 }
-
-.sq.coord {
-  pointer-events: none;
-}
+.game-over-content h2 { margin-top: 0; color: #ef4444; font-size: 24px; }
+.winner-text { font-size: 18px; font-weight: 700; margin: 8px 0; color: #facc15; }
+.reason-text { color: var(--sub); font-size: 14px; margin-bottom: 12px; }
+.congrats-text { font-size: 16px; font-weight: 600; color: #4ade80; margin-top: 8px; }
