@@ -12,6 +12,13 @@ const sideBadge = document.getElementById('sideBadge');
 const promoDlg = document.getElementById('promoDlg');
 const promoGrid = document.getElementById('promoGrid');
 
+// Game Over Elements
+const gameOverDlg = document.getElementById('gameOverDlg');
+const gameOverWinner = document.getElementById('gameOverWinner');
+const gameOverReason = document.getElementById('gameOverReason');
+const gameOverCongrats = document.getElementById('gameOverCongrats');
+const btnPlayAgain = document.getElementById('btnPlayAgain');
+
 let board = new Array(64).fill(null);
 let whiteToMove = true;
 let castling = { K: true, Q: true, k: true, q: true };
@@ -22,6 +29,49 @@ let selected = -1;
 let highlights = new Set();
 let flip = false;
 let pgnMoves = [];
+let isGameOver = false;
+
+// Web Audio API Synthesizer for Chess Sound Effects
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  const now = audioCtx.currentTime;
+  if (type === 'move') {
+    osc.frequency.setValueAtTime(400, now);
+    osc.frequency.exponentialRampToValueAtTime(200, now + 0.08);
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+    osc.start(now); osc.stop(now + 0.08);
+  } else if (type === 'capture') {
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, now);
+    osc.frequency.exponentialRampToValueAtTime(300, now + 0.12);
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+    osc.start(now); osc.stop(now + 0.12);
+  } else if (type === 'check') {
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.linearRampToValueAtTime(900, now + 0.15);
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    osc.start(now); osc.stop(now + 0.15);
+  } else if (type === 'gameover') {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(523.25, now); // C5
+    osc.frequency.setValueAtTime(659.25, now + 0.15); // E5
+    osc.frequency.setValueAtTime(783.99, now + 0.3); // G5
+    gain.gain.setValueAtTime(0.5, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+    osc.start(now); osc.stop(now + 0.6);
+  }
+}
 
 const unicode = {
   'P': '♟', 'N': '♞', 'B': '♝', 'R': '♜', 'Q': '♛', 'K': '♚',
@@ -59,6 +109,7 @@ function parseFEN(fen) {
   enPassant = ep === '-' ? -1 : algebraicToIdx(ep);
   halfmove = parseInt(hm || '0', 10);
   fullmove = parseInt(fm || '1', 10);
+  isGameOver = false;
 }
 
 function makeFEN() {
@@ -137,6 +188,7 @@ function getSquareIndex(e) {
 }
 
 async function onSquareClick(e) {
+  if (isGameOver) return;
   const i = getSquareIndex(e);
   if (i === -1 || isNaN(i)) return;
 
@@ -160,7 +212,7 @@ async function onSquareClick(e) {
     selected = -1;
     highlights.clear();
     render();
-    await maybeAIMove();
+    if (!isGameOver) await maybeAIMove();
   } else {
     if (p && ((whiteToMove && isWhite(p)) || (!whiteToMove && isBlack(p)))) {
       selected = i;
@@ -293,6 +345,8 @@ function applyMove(m) {
 
 async function doMove(m) {
   const p = board[m.from];
+  const isCapture = !!board[m.to] || m.enPassant;
+
   if (p && p.toUpperCase() === 'P') {
     const [, tr] = fr(m.to);
     const need = (isWhite(p) && tr === 7) || (isBlack(p) && tr === 0);
@@ -302,12 +356,30 @@ async function doMove(m) {
   }
   const before = snapshot();
   applyMove(m);
+
+  // Trigger Sound Effect based on move outcome
+  const inCheck = isSquareAttacked(findKing(whiteToMove), !whiteToMove);
+  if (inCheck) {
+    playSound('check');
+  } else if (isCapture) {
+    playSound('capture');
+  } else {
+    playSound('move');
+  }
+
   const san = moveToSAN(before, m);
   pgnMoves.push(san);
   moveHistory.push({ m, before });
 }
 
-function undo() { if (moveHistory.length === 0) return; const last = moveHistory.pop(); restore(last.before); pgnMoves.pop(); render(); }
+function undo() { 
+  if (moveHistory.length === 0) return; 
+  const last = moveHistory.pop(); 
+  restore(last.before); 
+  pgnMoves.pop(); 
+  isGameOver = false;
+  render(); 
+}
 
 function formatPGN() {
   let out = ''; let moveNo = 1; for (let i = 0; i < pgnMoves.length; i += 2) { out += `${moveNo}. ${pgnMoves[i] || ''} ${pgnMoves[i + 1] || ''} `; moveNo++; }
@@ -353,9 +425,53 @@ function updateMoveList() {
 function updateStatus() {
   const legal = generateAllLegalMoves();
   const inCheck = isSquareAttacked(findKing(whiteToMove), !whiteToMove);
-  if (legal.length === 0) { statusEl.textContent = inCheck ? (whiteToMove ? 'Checkmate — Black wins' : 'Checkmate — White wins') : 'Stalemate'; return; }
-  if (halfmove >= 100) { statusEl.textContent = 'Draw — 50-move rule'; return; }
+
+  if (legal.length === 0) {
+    isGameOver = true;
+    if (inCheck) {
+      const winner = whiteToMove ? 'Black' : 'White';
+      statusEl.textContent = `Checkmate — ${winner} wins`;
+      triggerGameOver(winner, 'by Checkmate');
+    } else {
+      statusEl.textContent = 'Stalemate';
+      triggerGameOver(null, 'by Stalemate');
+    }
+    return;
+  }
+  if (halfmove >= 100) {
+    isGameOver = true;
+    statusEl.textContent = 'Draw — 50-move rule';
+    triggerGameOver(null, 'by 50-move rule');
+    return;
+  }
   statusEl.textContent = inCheck ? 'Check!' : 'Playing';
+}
+
+function triggerGameOver(winner, reason) {
+  playSound('gameover');
+  setTimeout(() => {
+    if (winner) {
+      gameOverWinner.textContent = `${winner} Wins!`;
+      gameOverReason.textContent = reason;
+
+      const isVsAI = vsAIChk.checked;
+      const humanIsWhite = sideBadge ? sideBadge.textContent.includes('White') : true;
+      const humanWon = isVsAI && ((winner === 'White' && humanIsWhite) || (winner === 'Black' && !humanIsWhite));
+
+      if (humanWon) {
+        gameOverCongrats.textContent = '🎉 Congratulations! Outstanding victory!';
+      } else if (isVsAI) {
+        gameOverCongrats.textContent = '🤖 Game Over! AI takes this round.';
+      } else {
+        gameOverCongrats.textContent = `🎉 Congratulations to ${winner}!`;
+      }
+    } else {
+      gameOverWinner.textContent = 'Draw!';
+      gameOverReason.textContent = reason;
+      gameOverCongrats.textContent = '🤝 Well fought by both sides!';
+    }
+    gameOverDlg.showModal();
+  }, 250);
 }
 
 function promptPromotion(white) {
@@ -402,15 +518,14 @@ function minimax(depth, alpha, beta) {
   return best;
 }
 
-// Executes an AI move when triggered automatically during gameplay
 async function maybeAIMove() {
-  if (!vsAIChk.checked) return;
+  if (!vsAIChk.checked || isGameOver) return;
   
   const humanIsWhite = sideBadge ? sideBadge.textContent.includes('White') : true;
   const aiPlaysNow = (whiteToMove && !humanIsWhite) || (!whiteToMove && humanIsWhite);
   if (!aiPlaysNow) return;
 
-  grid.style.pointerEvents = 'none'; // Lock board during calculation
+  grid.style.pointerEvents = 'none';
   await new Promise(r => setTimeout(r, 200));
   
   const { move } = minimax(2, -1e9, 1e9);
@@ -418,11 +533,11 @@ async function maybeAIMove() {
     await doMove(move); 
     render(); 
   }
-  grid.style.pointerEvents = 'auto'; // Unlock board
+  grid.style.pointerEvents = 'auto';
 }
 
-// Direct trigger when clicking the "AI Move" button manually
 async function forceAIMove() {
+  if (isGameOver) return;
   grid.style.pointerEvents = 'none';
   await new Promise(r => setTimeout(r, 100));
   
@@ -436,7 +551,18 @@ async function forceAIMove() {
   grid.style.pointerEvents = 'auto';
 }
 
-document.getElementById('btnNew').onclick = () => { parseFEN(START_FEN); moveHistory = []; pgnMoves = []; selected = -1; highlights.clear(); render(); };
+function resetGame() {
+  parseFEN(START_FEN);
+  moveHistory = [];
+  pgnMoves = [];
+  selected = -1;
+  highlights.clear();
+  if (gameOverDlg.open) gameOverDlg.close();
+  render();
+}
+
+document.getElementById('btnNew').onclick = resetGame;
+btnPlayAgain.onclick = resetGame;
 document.getElementById('btnUndo').onclick = () => { undo(); };
 document.getElementById('btnFlip').onclick = () => { flip = !flip; render(); };
 document.getElementById('btnAIMove').onclick = forceAIMove;
@@ -447,4 +573,4 @@ document.getElementById('btnLoadFEN').onclick = () => {
 vsAIChk.onchange = () => { statusEl.textContent = vsAIChk.checked ? 'Playing vs Computer' : 'Two-Player (Local)'; maybeAIMove(); };
 
 parseFEN(START_FEN);
-render();
+render();q
